@@ -1,0 +1,116 @@
+
+
+import logging
+import datetime
+import statistics
+from time import sleep
+from alice_blue import *
+from pprint import pprint
+import json
+import schedule
+import os
+import sys
+import sqlite3
+import dateutil.parser
+from sqlite3 import Error
+import pandas as pd
+
+#auth_data = json.loads(open('access_token.json', 'r').read().strip())
+#userinfo = json.loads(open('userinfo.json', 'r').read().strip())
+#username = userinfo['username']
+#password = userinfo['password']
+#access_token = auth_data['data']['auth_token']
+
+# Optional for getting debug messages.
+logging.basicConfig(level=logging.DEBUG, filename=datetime.datetime.now(
+).strftime("%H%M%S")+".log", filemode='w')
+# Config
+
+ltp = 0.0
+socket_opened = False
+alice = None
+timeEnd = '221500'
+minutes_processed = {}
+minute_candlesticks = []
+current_tick = None
+previous_tick = None
+tickdata={}
+df=pd.DataFrame()
+
+##################### update ticker list ######################################
+# tickers = ["ZEEL","WIPRO","VEDL","ULTRACEMCO","UPL","TITAN","TECHM","TATASTEEL",
+#            "TATAMOTORS","TCS","SUNPHARMA","SBIN","SHREECEM","RELIANCE","POWERGRID",
+#            "ONGC","NESTLEIND","NTPC","MARUTI","M&M","LT","KOTAKBANK","JSWSTEEL","INFY",
+#            "INDUSINDBK","IOC","ITC","ICICIBANK","HDFC","HINDUNILVR","HINDALCO",
+#            "HEROMOTOCO","HDFCBANK","HCLTECH","GRASIM","GAIL","EICHERMOT","DRREDDY",
+#            "COALINDIA","CIPLA","BRITANNIA","INFRATEL","BHARTIARTL","BPCL","BAJAJFINSV",
+#            "BAJFINANCE","BAJAJ-AUTO","AXISBANK","ASIANPAINT","ADANIPORTS"]
+###############################################################################
+
+##################### update ticker list ######################################
+#tickers = ["ZEEL"]
+tickers = ["SILVERM AUG FUT","CRUDEOIL AUG FUT"]
+###############################################################################
+# For exploring DB use => https://download.sqlitebrowser.org/DB.Browser.for.SQLite-3.11.2-win64.zip
+# This is per second collection can be modified to have 1 min or 5 min also
+# Symbol entry is not necessary is just an example
+
+
+def event_handler_quote_update(message):
+    global ltp,tickdata,df
+
+    tick_datetime_object = datetime.datetime.fromtimestamp(
+        message['exchange_time_stamp'])
+    tick_dt = tick_datetime_object.strftime("%Y-%m-%d %H:%M:%S")
+    tok = str(message['instrument'][1])
+    sym = message['instrument'][2]
+    ltp = float(message['ltp'])
+    volume = int(message['volume'])           
+    vb = [{'ts':tick_dt,'t':tok,'l':ltp}]    
+    df = pd.DataFrame.from_dict(vb, orient='columns')
+    df.set_index('ts')
+    tickdata[sym]=df.append(df)
+    print(df
+	
+def open_callback():
+    global socket_opened
+    socket_opened = True
+
+
+def main():
+    global socket_opened
+    global alice
+    global username
+    global password
+    global access_token
+
+
+
+    access_token = AliceBlue.login_and_get_access_token(username='USER', password='PWD$', twoFA='QA',  api_secret='SECRET')
+
+    alice = AliceBlue(username='USER', password='PWD$',
+                      access_token=access_token, master_contracts_to_download=["MCX"])
+
+    socket_opened = False
+    alice.start_websocket(subscribe_callback=event_handler_quote_update,
+                          socket_open_callback=open_callback,
+                          run_in_background=True)
+
+    while(socket_opened == False):    # wait till socket open & then subscribe
+        pass
+
+    instruments = []
+    tokens = []
+    
+    for ticker in tickers:
+                #ins_scrip = alice.get_instrument_by_symbol("MCX", ticker)
+            ins_scrip = alice.get_instrument_by_symbol("MCX", ticker) # for NSE scrips, use NFO for Futures
+            instruments.append(ins_scrip)
+            tokens.append(ins_scrip[1])
+    while True:   
+        if(datetime.datetime.now().strftime("%H%M%S") <= timeEnd):
+            alice.subscribe(instruments, LiveFeedType.COMPACT)
+        
+
+if(__name__ == '__main__'):
+    main()
